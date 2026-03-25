@@ -24,6 +24,7 @@ const ratingSchema = new mongoose.Schema(
         {
             type: String,
             enum: ["up", "down"],
+            required: true,
         },
     },
     { timestamps: true }
