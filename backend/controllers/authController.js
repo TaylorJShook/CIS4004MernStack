@@ -15,6 +15,9 @@ const bcrypt = require('bcryptjs')
  *   409 - Username already exists
  */
 const createUser = async (req, res) => {
+
+    if (req.body === undefined) { return res.status(404).json({ message: "Did not send body" }) }
+
     const { username, password, role } = req.body
 
     const existingUser = await User.findOne({ username })
@@ -46,6 +49,9 @@ const createUser = async (req, res) => {
  *   401 - Invalid credentials (wrong username or password)
  */
 const login = async (req, res) => {
+
+    if (req.body === undefined) { return res.status(404).json({ message: "Did not send body" }) }
+
     const { username, password } = req.body
 
     const user = await User.findOne({ username })
