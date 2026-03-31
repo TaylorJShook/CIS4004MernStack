@@ -1,11 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const { createUser, getUsers, login } = require("../controllers/authController");
+const { createUser, getUsers, login, getMe } = require("../controllers/authController");
+const { protect, adminOnly } = require("../middleware/authMiddleware");
 
-router.post("/api/auth/create", createUser);
-router.post("/api/auth/login", login);
-router.get("/api/auth/users", getUsers);
-
-
+router.post("/create", createUser);
+router.post("/login", login);
+router.get("/me", protect, getMe);
+router.get("/users", protect, adminOnly, getUsers);
 
 module.exports = router;

@@ -1,85 +1,115 @@
-const User = require('../models/user')
-const bcrypt = require('bcryptjs')
+const User = require("../models/user");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
-/*
- * POST /api/auth/create
- * Creates a new user.
- *
- * Request body (JSON):
- *   username  {string}  required  Must be unique
- *   password  {string}  required  Will be hashed with bcrypt
- *   role      {string}  optional  "admin" or "user" — defaults to "user"
- *
- * Responses:
- *   201 - User created successfully
- *   409 - Username already exists
- */
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+};
+
 const createUser = async (req, res) => {
+  try {
+    if (!req.body) {
+      return res.status(400).json({ message: "Request body is required" });
+    }
 
-    if (req.body === undefined) { return res.status(404).json({ message: "Did not send body" }) }
+    const { username, password, role } = req.body;
 
-    const { username, password, role } = req.body
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username and password are required" });
+    }
 
-    const existingUser = await User.findOne({ username })
+    const existingUser = await User.findOne({ username });
     if (existingUser) {
-        return res.status(409).json({ message: "Username already exists" })
+      return res.status(409).json({ message: "Username already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const lastUser = await User.findOne().sort({ userNumber: -1 })
-    const userNumber = lastUser ? lastUser.userNumber + 1 : 1
+    // Find the highest existing userNumber
+    const maxUser = await User.findOne({ userNumber: { $exists: true } })
+      .sort({ userNumber: -1 })
+      .select("userNumber");
 
-    const user = new User({ userNumber, username, password: hashedPassword, role })
-    await user.save()
+    const nextUserNumber = maxUser ? maxUser.userNumber + 1 : 1;
 
-    res.status(201).json({ message: "User created successfully" })
-}
+    const user = new User({
+      userNumber: nextUserNumber,
+      username,
+      password: hashedPassword,
+      role: role === "admin" ? "admin" : "user",
+    });
 
-/*
- * POST /api/auth/login
- * Logs in an existing user.
- *
- * Request body (JSON):
- *   username  {string}  required
- *   password  {string}  required
- *
- * Responses:
- *   200 - Login successful
- *   401 - Invalid credentials (wrong username or password)
- */
+    await user.save();
+
+    res.status(201).json({
+      message: "User created successfully",
+      user: {
+        _id: user._id,
+        userNumber: user.userNumber,
+        username: user.username,
+        role: user.role,
+      },
+      token: generateToken(user._id),
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "Duplicate username or userNumber detected",
+      });
+    }
+
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const login = async (req, res) => {
+  try {
+    if (!req.body) {
+      return res.status(400).json({ message: "Request body is required" });
+    }
 
-    if (req.body === undefined) { return res.status(404).json({ message: "Did not send body" }) }
+    const { username, password } = req.body;
 
-    const { username, password } = req.body
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username and password are required" });
+    }
 
-    const user = await User.findOne({ username })
+    const user = await User.findOne({ username });
     if (!user) {
-        return res.status(401).json({ message: "Invalid credentials" })
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const passwordMatch = await bcrypt.compare(password, user.password)
+    const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
-        return res.status(401).json({ message: "Invalid credentials" })
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // TODO: handle session creation stuff here ?
-    res.status(200).json({ message: "Login successful" })
-}
+    res.status(200).json({
+      message: "Login successful",
+      user: {
+        _id: user._id,
+        userNumber: user.userNumber,
+        username: user.username,
+        role: user.role,
+      },
+      token: generateToken(user._id),
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
-/*
- * GET /api/auth/users
- * Returns all users in the database.
- *
- * Request body: none
- *
- * Responses:
- *   200 - Array of user objects (userNumber, username, role, createdAt, updatedAt)
- */
 const getUsers = async (req, res) => {
-    const users = await User.find()
-    res.status(200).json(users)
-}
+  try {
+    const users = await User.find().select("-password").sort({ userNumber: 1 });
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
-module.exports = { createUser, getUsers, login };
+const getMe = async (req, res) => {
+  res.status(200).json(req.user);
+};
+
+module.exports = { createUser, getUsers, login, getMe };
