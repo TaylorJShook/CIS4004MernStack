@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const gameRoutes = require("./routes/gameRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 app.use(cors());
@@ -10,5 +11,6 @@ app.get("/", (req, res) => res.send("API is running"));
 app.get("/api/test", (req, res) => res.json({ message: "Backend is working" }));
 
 app.use(gameRoutes);
+app.use(authRoutes);
 
 module.exports = app;
