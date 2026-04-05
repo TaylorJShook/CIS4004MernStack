@@ -1,12 +1,21 @@
 import React from "react";
 
-export default function GameForm({ formData, setFormData, onSubmit, editingId, onCancel }) {
+// cahanged - now accepts genereList and platformsList from DB to render aschekcboxes
+export default function GameForm({ formData, setFormData, onSubmit, editingId, onCancel, genresList, platformsList }) {
+  const toggleId = (field, id) => {
+    setFormData((prev) => {
+      const list = prev[field];
+      return {
+        ...prev,
+        [field]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id],
+      };
+    });
+  };
+
   return (
     <section className="admin-form-panel">
       <div className="admin-form-header">
-        <div>
-          <h2 className="admin-form-title">{editingId ? "Update Game" : "Add New Game"}</h2>
-        </div>
+        <h2 className="admin-form-title">{editingId ? "Update Game" : "Add New Game"}</h2>
       </div>
 
       <div className="admin-form-grid">
@@ -18,24 +27,10 @@ export default function GameForm({ formData, setFormData, onSubmit, editingId, o
         />
 
         <input
-          className="admin-form-input"
-          placeholder="Genre"
-          value={formData.genre}
-          onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
-        />
-
-        <input
-          className="admin-form-input"
-          placeholder="Platform"
-          value={formData.platform}
-          onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
-        />
-
-        <input
           className="admin-form-input admin-form-input-wide"
           placeholder="Image URL"
-          value={formData.cover}
-          onChange={(e) => setFormData({ ...formData, cover: e.target.value })}
+          value={formData.coverImageUrl}
+          onChange={(e) => setFormData({ ...formData, coverImageUrl: e.target.value })}
         />
 
         <textarea
@@ -44,6 +39,42 @@ export default function GameForm({ formData, setFormData, onSubmit, editingId, o
           value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
         />
+
+        {genresList.length > 0 && (
+          <div className="admin-form-input-wide">
+            <p className="admin-form-label">Genres</p>
+            <div className="admin-checkbox-group">
+              {genresList.map((g) => (
+                <label key={g._id} className="admin-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={formData.genres.includes(g._id)}
+                    onChange={() => toggleId("genres", g._id)}
+                  />
+                  {g.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {platformsList.length > 0 && (
+          <div className="admin-form-input-wide">
+            <p className="admin-form-label">Platforms</p>
+            <div className="admin-checkbox-group">
+              {platformsList.map((p) => (
+                <label key={p._id} className="admin-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={formData.platforms.includes(p._id)}
+                    onChange={() => toggleId("platforms", p._id)}
+                  />
+                  {p.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="admin-form-actions">

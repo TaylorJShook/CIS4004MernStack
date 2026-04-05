@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import AuthPage from "./components/AuthPage";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
@@ -10,226 +10,258 @@ import AdminUsersTable from "./components/AdminUsersTable";
 import ReportsPanel from "./components/ReportsPanel";
 import MyRatingsPanel from "./components/MyRatingsPanel";
 import ProfilePanel from "./components/ProfilePanel";
+import { auth, games, ratings, genres, platforms, setToken, clearToken, getToken } from "./services/api";
 import "./css/app.css";
 
-const starterUsers = [
-  { id: 1, username: "admin1", password: "password1", role: "admin" },
-  { id: 2, username: "player1", password: "player123", role: "standard" },
-];
-
 export default function App() {
-  const [users, setUsers] = useState(starterUsers);
-  const [games, setGames] = useState([]);
-  const [ratings, setRatings] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [gamesList, setGamesList] = useState([]);
+  const [myRatings, setMyRatings] = useState([]);     //stores the logged-in users rating from DB
+  const [users, setUsers] = useState([]);
+  const [genresList, setGenresList] = useState([]);         //genres loaded from DB for the game form
+  const [platformsList, setPlatformsList] = useState([]);   //platforms loaded from db to game form 
   const [error, setError] = useState("");
   const [view, setView] = useState("home");
   const [selectedGame, setSelectedGame] = useState(null);
-  const [editingId, setEditingId] = useState(null);
+  const [editingGame, setEditingGame] = useState(null);     //now stores the full game object instance of just an id 
   const [formData, setFormData] = useState({
     title: "",
-    genre: "",
-    platform: "",
-    cover: "",
+    genres: [],         //array of genre IDs to send to bakcend
+    platforms: [],      //array of platform IDs to send to backend 
+    coverImageUrl: "",  //renaemd from "cover" to match backend field name 
     description: "",
   });
 
-  const enrichedGames = useMemo(() => {
-    return games.map((game) => {
-      const gameRatings = ratings.filter((rating) => rating.gameId === game.id);
-      return {
-        ...game,
-        likes: gameRatings.filter((rating) => rating.value === "like").length,
-        dislikes: gameRatings.filter((rating) => rating.value === "dislike").length,
-      };
-    });
-  }, [games, ratings]);
+  // On mount: restore session from localStorage token
+  useEffect(() => {
+    if (!getToken()) return;
+    auth.getMe()
+      .then((user) => {
+        setCurrentUser(user);
+      })
+      .catch(() => {
+        clearToken();
+      });
+  }, []);
 
-  const currentUserRatings = currentUser
-    ? ratings.filter((rating) => rating.userId === currentUser.id)
-    : [];
-
-  const selectedGameRating =
-    currentUser && selectedGame
-      ? ratings.find(
-          (rating) =>
-            rating.userId === currentUser.id && rating.gameId === selectedGame.id
-        )?.value
-      : null;
-
-  const resetGameForm = () => {
-    setEditingId(null);
-    setFormData({
-      title: "",
-      genre: "",
-      platform: "",
-      cover: "",
-      description: "",
-    });
-  };
-
-  const handleLogin = (username, password) => {
-    const found = users.find(
-      (user) => user.username === username && user.password === password
-    );
-
-    if (!found) {
-      setError("Invalid username or password.");
-      return;
+  // runs whenever currentUser changed - loads all data needed
+  useEffect(() => {
+    if (!currentUser) return;
+    fetchGames();
+    fetchGenresAndPlatforms();
+    if (currentUser.role !== "admin") {
+      fetchMyRatings();
+    } else {
+      fetchUsers();
     }
+  }, [currentUser]);
 
-    setCurrentUser(found);
-    setView("home");
-    setError("");
+  //gets all games from backend
+  const fetchGames = async () => {
+    try {
+      const data = await games.getAll();
+      setGamesList(data);
+    } catch (e) {
+      console.error("Failed to load games:", e.message);
+    }
   };
 
-  const handleCreateUser = (username, password) => {
+  //gets only current users ratings from backend
+  const fetchMyRatings = async () => {
+    try {
+      const data = await ratings.getMy();
+      setMyRatings(data);
+    } catch (e) {
+      console.error("Failed to load ratings:", e.message);
+    }
+  };
+
+  //gets all registed users - only called for admins
+  const fetchUsers = async () => {
+    try {
+      const data = await auth.getUsers();
+      setUsers(data);
+    } catch (e) {
+      console.error("Failed to load users:", e.message);
+    }
+  };
+
+  //gets genres and platforms at same time to populate games from checkboxes 
+  const fetchGenresAndPlatforms = async () => {
+    try {
+      const [g, p] = await Promise.all([genres.getAll(), platforms.getAll()]);
+      setGenresList(g);
+      setPlatformsList(p);
+    } catch (e) {
+      console.error("Failed to load genres/platforms:", e.message);
+    }
+  };
+
+  //now calls backend login  endpoint and saves the JWT token 
+  const handleLogin = async (username, password) => {
+    try {
+      const data = await auth.login(username, password);
+      setToken(data.token);
+      setCurrentUser(data.user);
+      setView("home");
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  //now calls backend register endpoint and saves JWT token 
+  const handleCreateUser = async (username, password) => {
     if (!username.trim() || !password.trim()) {
       setError("Username and password are required.");
       return;
     }
-
-    const duplicate = users.some(
-      (user) => user.username.toLowerCase() === username.trim().toLowerCase()
-    );
-
-    if (duplicate) {
-      setError("That username is already taken.");
-      return;
+    try {
+      const data = await auth.register(username, password);
+      setToken(data.token);
+      setCurrentUser(data.user);
+      setView("home");
+      setError("");
+    } catch (e) {
+      setError(e.message);
     }
-
-    const newUser = {
-      id: Date.now(),
-      username: username.trim(),
-      password: password.trim(),
-      role: "standard",
-    };
-
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUser(newUser);
-    setView("home");
-    setError("");
   };
 
+  //clears JWT token form localstorage on logout
   const handleLogout = () => {
+    clearToken();
     setCurrentUser(null);
+    setGamesList([]);
+    setMyRatings([]);
+    setUsers([]);
     setSelectedGame(null);
     setView("home");
     resetGameForm();
   };
 
-  const handleRate = (gameId, value) => {
-    if (!currentUser || currentUser.role !== "standard") return;
+  const resetGameForm = () => {
+    setEditingGame(null);
+    setFormData({ title: "", genres: [], platforms: [], coverImageUrl: "", description: "" });
+  };
 
-    setRatings((prev) => {
-      const existing = prev.find(
-        (rating) => rating.userId === currentUser.id && rating.gameId === gameId
-      );
-
-      if (existing) {
-        return prev.map((rating) =>
-          rating.id === existing.id ? { ...rating, value } : rating
+  //now sends game data to backend instead of udpating local state 
+  const handleCreateOrUpdateGame = async () => {
+    if (!formData.title || !formData.coverImageUrl || !formData.description) return;
+    try {
+      if (editingGame) {
+        const updated = await games.update(editingGame.gameNumber, formData);
+        setGamesList((prev) =>
+          prev.map((g) => (g._id === updated._id ? updated : g))
         );
+      } else {
+        const created = await games.create(formData);
+        setGamesList((prev) => [created, ...prev]);
       }
-
-      return [...prev, { id: Date.now(), userId: currentUser.id, gameId, value }];
-    });
-  };
-
-  const handleDeleteOwnRating = (ratingId) => {
-    setRatings((prev) =>
-      prev.filter(
-        (rating) => !(rating.id === ratingId && rating.userId === currentUser.id)
-      )
-    );
-  };
-
-  const handleCreateOrUpdateGame = () => {
-    if (
-      !formData.title ||
-      !formData.genre ||
-      !formData.platform ||
-      !formData.cover ||
-      !formData.description
-    ) {
-      return;
+      resetGameForm();
+    } catch (e) {
+      setError(e.message);
     }
-
-    if (editingId) {
-      setGames((prev) =>
-        prev.map((game) => (game.id === editingId ? { ...game, ...formData } : game))
-      );
-    } else {
-      setGames((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          ...formData,
-          createdBy: currentUser?.username || "admin1",
-        },
-      ]);
-    }
-
-    resetGameForm();
   };
 
+  //stores the full game object so we can access gamenumber for API call 
   const handleEditGame = (game) => {
     setView("manage-games");
-    setEditingId(game.id);
+    setEditingGame(game);
     setFormData({
       title: game.title,
-      genre: game.genre,
-      platform: game.platform || "",
-      cover: game.cover,
+      genres: game.genres.map((g) => g._id),        //pull just the IDs to pre-check the checkboxes 
+      platforms: game.platforms.map((p) => p._id),
+      coverImageUrl: game.coverImageUrl,
       description: game.description,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleDeleteGame = (gameId) => {
-    setGames((prev) => prev.filter((game) => game.id !== gameId));
-    setRatings((prev) => prev.filter((rating) => rating.gameId !== gameId));
-    if (selectedGame?.id === gameId) {
-      setSelectedGame(null);
+  //now calls backend delete endpoint using games gameNumber
+  const handleDeleteGame = async (gameNumber) => {
+    try {
+      await games.delete(gameNumber);
+      setGamesList((prev) => prev.filter((g) => g.gameNumber !== gameNumber));
+      if (selectedGame?.gameNumber === gameNumber) setSelectedGame(null);
+    } catch (e) {
+      setError(e.message);
     }
   };
 
-  const handleDeleteUser = (userId) => {
-    setUsers((prev) => prev.filter((user) => user.id !== userId));
-    setRatings((prev) => prev.filter((rating) => rating.userId !== userId));
+  //changed - now sends the vote to the backend and updates the games live counts from the server response 
+  const handleRate = async (gameNumber, vote) => {
+    try {
+      const data = await ratings.rate(gameNumber, vote);
+      // Update the game in list with fresh counts from server
+      setGamesList((prev) =>
+        prev.map((g) => (g.gameNumber === data.game.gameNumber ? { ...g, ...data.game } : g))
+      );
+      // Update selectedGame if open
+      if (selectedGame?.gameNumber === gameNumber) {
+        setSelectedGame((prev) => ({ ...prev, ...data.game }));
+      }
+      await fetchMyRatings();
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
+  //now calls the backend to remove the rating and sync 
+  const handleDeleteOwnRating = async (gameNumber) => {
+    try {
+      const data = await ratings.remove(gameNumber);
+      setGamesList((prev) =>
+        prev.map((g) => (g.gameNumber === data.game.gameNumber ? { ...g, ...data.game } : g))
+      );
+      if (selectedGame?.gameNumber === gameNumber) {
+        setSelectedGame((prev) => ({ ...prev, ...data.game }));
+      }
+      await fetchMyRatings();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  //now calls the backend delete endpoint using the users MongoDB _id
+  const handleDeleteUser = async (userId) => {
+    try {
+      await auth.deleteUser(userId);
+      setUsers((prev) => prev.filter((u) => u._id !== userId));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  //find the current user's rating for the open modal game
+  const selectedGameRating = selectedGame
+    ? myRatings.find((r) => r.game?.gameNumber === selectedGame.gameNumber)?.vote ?? null
+    : null;
+
+  // Keep selectedGame in sync with gamesList (so counts update without reopening)
+  const selectedGameEnriched = selectedGame
+    ? gamesList.find((g) => g.gameNumber === selectedGame.gameNumber) || selectedGame
+    : null;
+
   if (!currentUser) {
-    return (
-      <AuthPage
-        onLogin={handleLogin}
-        onCreateUser={handleCreateUser}
-        error={error}
-      />
-    );
+    return <AuthPage onLogin={handleLogin} onCreateUser={handleCreateUser} error={error} />;
   }
 
   return (
     <div className="app-shell">
       <div className="dashboard-layout">
-        <Sidebar
-          currentUser={currentUser}
-          view={view}
-          setView={setView}
-          onLogout={handleLogout}
-        />
+        <Sidebar currentUser={currentUser} view={view} setView={setView} onLogout={handleLogout} />
 
         <main className="dashboard-main">
           <TopBar currentUser={currentUser} />
 
           {view === "home" && (
             <HomePanel
-              games={enrichedGames}
+              games={gamesList}
               currentUser={currentUser}
               onOpen={setSelectedGame}
               onEdit={handleEditGame}
               onDelete={handleDeleteGame}
-              totalRatings={currentUserRatings.length}
+              totalRatings={myRatings.length}
             />
           )}
 
@@ -239,12 +271,13 @@ export default function App() {
                 formData={formData}
                 setFormData={setFormData}
                 onSubmit={handleCreateOrUpdateGame}
-                editingId={editingId}
+                editingId={editingGame?._id || null}
                 onCancel={resetGameForm}
+                genresList={genresList}
+                platformsList={platformsList}
               />
-
               <GameGrid
-                games={enrichedGames}
+                games={gamesList}
                 onOpen={setSelectedGame}
                 canManage
                 onEdit={handleEditGame}
@@ -262,37 +295,28 @@ export default function App() {
           )}
 
           {currentUser.role === "admin" && view === "reports" && (
-            <ReportsPanel users={users} games={enrichedGames} ratings={ratings} />
+            <ReportsPanel users={users} games={gamesList} />
           )}
 
-          {currentUser.role === "standard" && view === "my-ratings" && (
+          {currentUser.role !== "admin" && view === "my-ratings" && (
             <MyRatingsPanel
-              ratings={ratings}
-              games={enrichedGames}
-              currentUser={currentUser}
+              myRatings={myRatings}
               onDeleteOwnRating={handleDeleteOwnRating}
             />
           )}
 
-          {currentUser.role === "standard" && view === "profile" && (
-            <ProfilePanel
-              currentUser={currentUser}
-              totalRatings={currentUserRatings.length}
-            />
+          {currentUser.role !== "admin" && view === "profile" && (
+            <ProfilePanel currentUser={currentUser} totalRatings={myRatings.length} />
           )}
         </main>
       </div>
 
       <GameModal
-        game={
-          selectedGame
-            ? enrichedGames.find((game) => game.id === selectedGame.id) || selectedGame
-            : null
-        }
+        game={selectedGameEnriched}
         onClose={() => setSelectedGame(null)}
         onRate={handleRate}
         existingRating={selectedGameRating}
-        canRate={currentUser.role === "standard"}
+        canRate={currentUser.role !== "admin"}
       />
     </div>
   );

@@ -1,4 +1,6 @@
 const User = require("../models/user");
+const Rating = require("../models/rating");
+const Game = require("../models/game");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -112,4 +114,34 @@ const getMe = async (req, res) => {
   res.status(200).json(req.user);
 };
 
-module.exports = { createUser, getUsers, login, getMe };
+//added - lets admin delete a user and clean up all their ratings from the database
+const deleteUser = async (req, res) => {
+  try {
+    if (req.params.userId === req.user._id.toString()) {
+      return res.status(400).json({ message: "Cannot delete your own account" });
+    }
+
+    const user = await User.findByIdAndDelete(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Remove all ratings left by this user and update game counters
+    const userRatings = await Rating.find({ user: user._id });
+    for (const rating of userRatings) {
+      const game = await Game.findById(rating.game);
+      if (game) {
+        game.totalRatings -= 1;
+        if (rating.vote === "up") game.positiveRatings -= 1;
+        await game.save();
+      }
+    }
+    await Rating.deleteMany({ user: user._id });
+
+    res.json({ message: "User deleted" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { createUser, getUsers, login, getMe, deleteUser };

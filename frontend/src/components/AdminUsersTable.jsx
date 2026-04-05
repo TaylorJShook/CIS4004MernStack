@@ -9,6 +9,7 @@ export default function AdminUsersTable({ users, currentUser, onDeleteUser }) {
         <table className="admin-table">
           <thead>
             <tr>
+              <th>#</th>
               <th>Username</th>
               <th>Role</th>
               <th>Actions</th>
@@ -16,14 +17,15 @@ export default function AdminUsersTable({ users, currentUser, onDeleteUser }) {
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id}>
+              <tr key={user._id}>
+                <td>{user.userNumber}</td>
                 <td>{user.username}</td>
                 <td>{user.role}</td>
                 <td>
-                  {user.id !== currentUser.id ? (
+                  {user._id !== currentUser._id ? (
                     <button
                       className="admin-delete-user-button"
-                      onClick={() => onDeleteUser(user.id)}
+                      onClick={() => onDeleteUser(user._id)}
                     >
                       Delete User
                     </button>

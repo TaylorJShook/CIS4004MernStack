@@ -5,6 +5,10 @@ import StatPill from "./shared/StatPill";
 export default function GameModal({ game, onClose, onRate, existingRating, canRate }) {
   if (!game) return null;
 
+  //genres and platforms are now arrays of objects from db, so we join their name: 
+  const genres = game.genres?.map((g) => g.name).join(", ") || "—";
+  const plats = game.platforms?.map((p) => p.name).join(", ") || "—";
+
   return (
     <div className="modal-overlay">
       <div className="modal-panel">
@@ -12,26 +16,32 @@ export default function GameModal({ game, onClose, onRate, existingRating, canRa
           <X size={20} />
         </button>
 
-        <img src={game.cover} alt={game.title} className="modal-image" />
+        <img src={game.coverImageUrl} alt={game.title} className="modal-image" />
 
         <div className="modal-content">
-          <div className="modal-genre-tag">{game.genre}</div>
+          <div className="modal-genre-tag">{genres}</div>
           <h2 className="modal-title">{game.title}</h2>
-          <p className="modal-platform">Platform: {game.platform}</p>
+          <p className="modal-platform">Platform: {plats}</p>
           <p className="modal-description">{game.description}</p>
 
           <div className="modal-stats-row">
-            <StatPill icon={<ThumbsUp size={16} />} label="Likes" value={game.likes} />
-            <StatPill icon={<ThumbsDown size={16} />} label="Dislikes" value={game.dislikes} />
+            <StatPill icon={<ThumbsUp size={16} />} label="Likes" value={game.positiveRatings ?? 0} />
+            <StatPill icon={<ThumbsDown size={16} />} label="Dislikes" value={(game.totalRatings ?? 0) - (game.positiveRatings ?? 0)} />
             <StatPill icon={<Star size={16} />} label="Your Rating" value={existingRating || "none"} />
           </div>
 
           {canRate && (
             <div className="modal-rating-actions">
-              <button onClick={() => onRate(game.id, "like")} className="modal-like-button">
+              <button
+                onClick={() => onRate(game.gameNumber, "up")}
+                className={`modal-like-button${existingRating === "up" ? " active" : ""}`}
+              >
                 <ThumbsUp size={18} /> Thumbs Up
               </button>
-              <button onClick={() => onRate(game.id, "dislike")} className="modal-dislike-button">
+              <button
+                onClick={() => onRate(game.gameNumber, "down")}
+                className={`modal-dislike-button${existingRating === "down" ? " active" : ""}`}
+              >
                 <ThumbsDown size={18} /> Thumbs Down
               </button>
             </div>
