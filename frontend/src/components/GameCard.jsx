@@ -16,6 +16,7 @@ export default function GameCard({ game, onOpen, canManage, onEdit, onDelete }) 
 
         <p className="game-card-platform">Platform: {plats}</p>
         <p className="game-card-likes">👍 {game.positiveRatings ?? 0} people liked this</p>
+        <p className="game-card-likes">👎 {(game.totalRatings - game.positiveRatings) ?? 0} people disliked this</p>
 
         <button onClick={() => onOpen(game)} className="game-card-details-button">
           View Details
